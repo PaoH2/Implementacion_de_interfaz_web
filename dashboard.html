@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard de Análisis de Calidad de Datos</title>
+    <!-- Carga de Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Configuración de la Fuente -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f7f9;
+        }
+    </style>
+    <!-- Carga de Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body class="min-h-screen">
+
+    <div class="container mx-auto p-4 md:p-8">
+        <header class="mb-8 p-4 bg-white shadow-lg rounded-xl">
+            <h1 class="text-3xl font-extrabold text-gray-900 mb-1">Dashboard de Calidad de Datos</h1>
+            <p class="text-gray-500">Visualizaciones clave para decidir el tratamiento de su dataset.</p>
+        </header>
+
+        <!-- Sección de Carga (Loader) -->
+        <div id="loading" class="flex justify-center items-center h-64 text-xl text-indigo-600">
+            <svg class="animate-spin -ml-1 mr-3 h-8 w-8 text-indigo-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            Cargando datos del API...
+        </div>
+
+        <!-- Sección de KPIs y Metadatos -->
+        <div id="kpi-section" class="hidden grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <!-- KPI 1: Filas Totales -->
+            <div class="bg-white p-6 rounded-xl shadow-lg border-b-4 border-indigo-500 transition-all hover:shadow-xl">
+                <p class="text-sm font-medium text-gray-500">Filas Totales</p>
+                <p id="kpi-total-rows" class="text-4xl font-bold text-gray-900 mt-1">...</p>
+                <p class="text-xs text-gray-400 mt-2">Dimensión del dataset.</p>
+            </div>
+            <!-- KPI 2: Columnas Totales -->
+            <div class="bg-white p-6 rounded-xl shadow-lg border-b-4 border-indigo-500 transition-all hover:shadow-xl">
+                <p class="text-sm font-medium text-gray-500">Columnas Totales</p>
+                <p id="kpi-total-cols" class="text-4xl font-bold text-gray-900 mt-1">...</p>
+                <p class="text-xs text-gray-400 mt-2">Variables disponibles.</p>
+            </div>
+            <!-- KPI 3: Ratio de Valores Nulos -->
+            <div class="bg-white p-6 rounded-xl shadow-lg border-b-4 border-red-500 transition-all hover:shadow-xl">
+                <p class="text-sm font-medium text-gray-500">Ratio Total de Nulos</p>
+                <p id="kpi-null-ratio" class="text-4xl font-bold text-red-600 mt-1">...</p>
+                <p class="text-xs text-gray-400 mt-2">Porcentaje de celdas vacías (Pérdida de Información).</p>
+            </div>
+        </div>
+
+        <!-- Sección de Gráficos -->
+        <div id="charts-section" class="hidden grid grid-cols-1 lg:grid-cols-2 gap-8">
+
+            <!-- Gráfico 1: Valores Nulos por Columna -->
+            <div class="bg-white p-6 rounded-xl shadow-lg">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4">1. Valores Nulos por Columna</h2>
+                <p class="text-sm text-gray-500 mb-4">Decisión: Imputación vs. Eliminación de columna.</p>
+                <div class="h-64">
+                    <canvas id="nullsChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Gráfico 2: Distribución de Filas Duplicadas -->
+            <div class="bg-white p-6 rounded-xl shadow-lg">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4">2. Distribución de Filas Duplicadas</h2>
+                <p class="text-sm text-gray-500 mb-4">Decisión: Eliminación de filas duplicadas si el ratio es alto.</p>
+                <div class="h-64 flex justify-center items-center">
+                    <canvas id="duplicatesChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Gráfico 3: Distribución de Variables Categóricas -->
+            <div class="bg-white p-6 rounded-xl shadow-lg">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4">3. Distribución Categórica</h2>
+                <p class="text-sm text-gray-500 mb-4">Decisión: Agrupación (Binning) de categorías de baja frecuencia.</p>
+                <div class="h-64">
+                    <canvas id="categoricalChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Gráfico 4: Distribución de Variables Numéricas (Histograma) -->
+            <div class="bg-white p-6 rounded-xl shadow-lg">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4">4. Distribución Numérica</h2>
+                <p class="text-sm text-gray-500 mb-4">Decisión: Identificación y tratamiento de *outliers* o transformaciones.</p>
+                <div class="h-64">
+                    <canvas id="numericalChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. DATOS SIMULADOS (API) ---
+        // Esta estructura de datos simula la respuesta JSON de la API de Django.
+        const mockApiData = {
+            metadata: {
+                total_rows: 5000,
+                total_cols: 12,
+                duplicate_rows: 160,
+            },
+            null_counts: {
+                labels: ['ID', 'Precio', 'Descripción', 'Categoría', 'Rating', 'Fecha_Pedido'],
+                counts: [0, 99, 195, 0, 616, 28],
+                total: 60000 // Total de celdas nulas en el dataset (suma de todos los 'counts')
+            },
+            categorical_dist: {
+                labels: ['Electrónica', 'Ropa', 'Alimentos', 'Hogar'],
+                counts: [1800, 1500, 700, 1000]
+            },
+            numerical_dist: {
+                labels: ['<100', '100-500', '500-1000', '1000+'],
+                counts: [500, 3000, 1000, 500]
+            }
+        };
+
+        // --- 2. FUNCIÓN DE SIMULACIÓN DE API ---
+        async function fetchDatasetAnalysis() {
+            document.getElementById('loading').classList.remove('hidden');
+
+            // Simular latencia de red de 1.5 segundos
+            await new Promise(resolve => setTimeout(resolve, 1500));
+
+            // Ocultar cargador y mostrar secciones
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('kpi-section').classList.remove('hidden');
+            document.getElementById('charts-section').classList.remove('hidden');
+
+            return mockApiData; // Devuelve los datos simulados
+        }
+
+
+        // --- 3. FUNCIONES DE RENDERING ---
+
+        // Función para renderizar los KPIs
+        function renderKPIs(metadata, nullCounts) {
+            const totalRows = metadata.total_rows;
+            const totalCols = metadata.total_cols;
+            const duplicateRows = metadata.duplicate_rows;
+            
+            // Cálculo del total de celdas y total de nulos
+            const totalCells = totalRows * totalCols;
+            const totalNullsSum = nullCounts.counts.reduce((sum, count) => sum + count, 0);
+
+            // Cálculo del Ratio de Nulos
+            let nullRatio = 0;
+            if (totalCells > 0) {
+                 // Ratio de nulos en el dataset completo (Total de Celdas Nulas / Total de Celdas)
+                nullRatio = (totalNullsSum / totalCells) * 100;
+            }
+            
+            // Asignación a elementos HTML
+            document.getElementById('kpi-total-rows').textContent = totalRows.toLocaleString('es-ES');
+            document.getElementById('kpi-total-cols').textContent = totalCols.toLocaleString('es-ES');
+            document.getElementById('kpi-null-ratio').textContent = `${nullRatio.toFixed(2)}%`;
+            
+            // Mostrar filas duplicadas como un KPI adicional (opcional)
+            // Ya está implícito en el gráfico de duplicados, pero lo agregamos
+            // console.log(`Filas Duplicadas: ${duplicateRows}`);
+        }
+
+        // Función para renderizar los gráficos
+        function renderChart(canvasId, type, labels, data, options) {
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            return new Chart(ctx, {
+                type: type,
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        ...options.dataset
+                    }]
+                },
+                options: options.config
+            });
+        }
+        
+        // --- 4. CONFIGURACIÓN ESPECÍFICA DE GRÁFICOS ---
+        
+        function setupCharts(data) {
+            const totalRows = data.metadata.total_rows;
+            
+            // Gráfico 1: Valores Nulos por Columna (Bar Chart)
+            const nullsChartOptions = {
+                dataset: {
+                    label: 'Nulos',
+                    backgroundColor: 'rgba(239, 68, 68, 0.8)', // Rojo
+                    borderColor: 'rgb(239, 68, 68)',
+                    borderWidth: 1,
+                    hoverBackgroundColor: 'rgba(239, 68, 68, 1)',
+                },
+                config: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Conteo de Nulos'
+                            },
+                            ticks: {
+                                callback: function(value) {
+                                    return value.toLocaleString('es-ES');
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                afterLabel: function(context) {
+                                    const percentage = ((context.parsed.y / totalRows) * 100).toFixed(2);
+                                    return `Faltante: ${percentage}%`;
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+            renderChart('nullsChart', 'bar', data.null_counts.labels, data.null_counts.counts, nullsChartOptions);
+
+            // Gráfico 2: Distribución de Duplicados (Doughnut Chart)
+            const duplicateRows = data.metadata.duplicate_rows;
+            const uniqueRows = totalRows - duplicateRows;
+
+            const duplicatesChartOptions = {
+                dataset: {
+                    backgroundColor: ['#4F46E5', '#A5B4FC'], // Índigo
+                    borderColor: '#ffffff',
+                    borderWidth: 2
+                },
+                config: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom' },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.parsed) {
+                                        const percentage = ((context.parsed / totalRows) * 100).toFixed(2);
+                                        label += `${context.parsed.toLocaleString('es-ES')} (${percentage}%)`;
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+            renderChart('duplicatesChart', 'doughnut', ['Filas Únicas', 'Filas Duplicadas'], [uniqueRows, duplicateRows], duplicatesChartOptions);
+
+            // Gráfico 3: Distribución Categórica (Bar Chart)
+            const categoricalChartOptions = {
+                dataset: {
+                    label: 'Frecuencia',
+                    backgroundColor: 'rgba(16, 185, 129, 0.8)', // Verde Esmeralda
+                    borderColor: 'rgb(16, 185, 129)',
+                    borderWidth: 1,
+                },
+                config: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { beginAtZero: true }
+                    },
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            };
+            renderChart('categoricalChart', 'bar', data.categorical_dist.labels, data.categorical_dist.counts, categoricalChartOptions);
+
+            // Gráfico 4: Distribución Numérica (Histograma/Bar Chart)
+            const numericalChartOptions = {
+                dataset: {
+                    label: 'Conteo',
+                    backgroundColor: 'rgba(59, 130, 246, 0.8)', // Azul
+                    borderColor: 'rgb(59, 130, 246)',
+                    borderWidth: 1,
+                },
+                config: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { beginAtZero: true }
+                    },
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            };
+            renderChart('numericalChart', 'bar', data.numerical_dist.labels, data.numerical_dist.counts, numericalChartOptions);
+        }
+
+        // --- 5. FUNCIÓN PRINCIPAL DE EJECUCIÓN ---
+
+        async function renderDashboard() {
+            try {
+                const data = await fetchDatasetAnalysis();
+                
+                // 1. Renderizar KPIs y Metadatos
+                // Ahora pasamos la metadata y el objeto null_counts completo
+                renderKPIs(data.metadata, data.null_counts); 
+                
+                // 2. Renderizar Gráficos
+                setupCharts(data);
+
+            } catch (error) {
+                // El error ya se maneja en fetchDatasetAnalysis
+                console.error("Fallo general al renderizar el dashboard:", error);
+            }
+        }
+
+        // Inicializar el dashboard al cargar la ventana
+        window.onload = renderDashboard;
+    </script>
+</body>
+</html>
