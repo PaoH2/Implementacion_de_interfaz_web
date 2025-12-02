@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Nutricional Interactivo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <style>
+        /* Estilo personalizado para el Dashboard */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+
+    <header class="bg-indigo-600 shadow-md">
+        <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
+            <h1 class="text-3xl font-extrabold text-white tracking-tight">
+                Análisis de Nutrición y Calidad
+            </h1>
+            <span class="text-indigo-200">Recomendación basada en datos (Maximizar Nutriente / Minimizar Grasa)</span>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto py-8 sm:px-6 lg:px-8">
+        
+        <div id="loading" class="text-center py-12 text-indigo-600">
+            <svg class="animate-spin h-10 w-10 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <p class="mt-2 text-lg font-medium">Cargando datos del API...</p>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-lg p-6 mb-8 border-l-4 border-indigo-600 hidden" id="recommendation-control">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4">Busqueda Nutricional Óptima</h2>
+            <div class="flex flex-col sm:flex-row items-start sm:items-center space-y-4 sm:space-y-0 sm:space-x-6">
+                <label for="nutrient-select" class="text-lg font-medium text-gray-700">Maximizar Nutriente:</label>
+                <select id="nutrient-select" onchange="fetchAndRenderRecommendation()" class="p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 w-full sm:w-auto">
+                    <option value="">-- Selecciona un Nutriente --</option>
+                    <option value="protein">Proteína</option>
+                    <option value="iron">Hierro</option>
+                    <option value="vitamin_c">Vitamina C</option>
+                    <option value="carbs">Carbohidratos</option>
+                </select>
+            </div>
+            <div id="recommendation-result" class="mt-6 p-4 bg-indigo-50 rounded-lg border border-indigo-200">
+                <p class="text-gray-500">Selecciona un nutriente para ver qué alimento maximiza su valor mientras minimiza el contenido de grasa.</p>
+            </div>
+        </div>
+        
+        <h2 class="text-2xl font-bold text-gray-800 mt-8 mb-4 border-b pb-2 hidden" id="quality-header">Indicadores de Calidad del Dataset</h2>
+
+        <div id="kpi-section" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8 hidden">
+            <div class="bg-white rounded-xl shadow-lg p-6 flex items-center justify-between">
+                <div><p class="text-sm font-medium text-gray-500">Filas Totales</p><p id="kpi-rows" class="text-3xl font-bold text-gray-900 mt-1">...</p></div>
+                <div class="text-indigo-500"><svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H7m10 14H7"/></svg></div>
+            </div>
+            <div class="bg-white rounded-xl shadow-lg p-6 flex items-center justify-between">
+                <div><p class="text-sm font-medium text-gray-500">Columnas Totales</p><p id="kpi-cols" class="text-3xl font-bold text-gray-900 mt-1">...</p></div>
+                <div class="text-indigo-500"><svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="12" y1="3" x2="12" y2="21"/></svg></div>
+            </div>
+            <div class="bg-white rounded-xl shadow-lg p-6 flex items-center justify-between">
+                <div><p class="text-sm font-medium text-gray-500">Ratio de Nulos</p><p id="kpi-null-ratio" class="text-3xl font-bold text-red-500 mt-1">...</p></div>
+                <div class="text-red-500"><svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+            </div>
+            <div class="bg-white rounded-xl shadow-lg p-6 flex items-center justify-between">
+                <div><p class="text-sm font-medium text-gray-500">Filas Duplicadas</p><p id="kpi-duplicates" class="text-3xl font-bold text-orange-500 mt-1">...</p></div>
+                <div class="text-orange-500"><svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 17L22 17M22 17L19 20M22 17L19 14"/><path d="M8 17H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v3"/></svg></div>
+            </div>
+        </div>
+
+        <div id="charts-section" class="grid grid-cols-1 lg:grid-cols-2 gap-8 hidden">
+            <div class="bg-white p-6 rounded-xl shadow-lg">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4 border-b pb-2">Valores Nulos por Columna</h2>
+                <div class="relative h-96"><canvas id="nullsChart"></canvas></div>
+                <p class="text-sm text-gray-500 mt-3">Gráfico de barras que muestra el volumen de datos faltantes. Decisión: Ayuda a identificar columnas candidatas para imputación o eliminación.</p>
+            </div>
+
+            <div class="bg-white p-6 rounded-xl shadow-lg">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4 border-b pb-2">Distribución de Filas Duplicadas</h2>
+                <div class="relative h-96 flex items-center justify-center"><canvas id="duplicatesChart" class="max-h-80"></canvas></div>
+                <p class="text-sm text-gray-500 mt-3">Gráfico de pastel/doughnut para visualizar la proporción de filas completamente duplicadas. Decisión: Determina si se requiere una eliminación masiva de duplicados.</p>
+            </div>
+
+            <div class="bg-white p-6 rounded-xl shadow-lg">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4 border-b pb-2">Distribución Categórica (Producto)</h2>
+                <div class="relative h-96"><canvas id="categoricalChart"></canvas></div>
+                <p class="text-sm text-gray-500 mt-3">Distribución de frecuencias de la columna 'category'. Decisión: Ayuda a identificar sesgos o categorías con muy pocas observaciones.</p>
+            </div>
+
+            <div class="bg-white p-6 rounded-xl shadow-lg">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4 border-b pb-2">Distribución Numérica (Simulación)</h2>
+                <div class="relative h-96"><canvas id="numericalChart"></canvas></div>
+                <p class="text-sm text-gray-500 mt-3">Este gráfico simula un histograma. Decisión: Permite detectar 'outliers' (valores atípicos) y evaluar la necesidad de transformaciones de datos.</p>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const API_BASE_URL = 'http://127.0.0.1:8000/api/data-quality-analysis/'; 
+
+        let nullsChartInstance, duplicatesChartInstance, categoricalChartInstance, numericalChartInstance;
+
+        // Limpia cualquier gráfico existente antes de dibujar uno nuevo
+        function destroyCharts() {
+            if (nullsChartInstance) nullsChartInstance.destroy();
+            if (duplicatesChartInstance) duplicatesChartInstance.destroy();
+            if (categoricalChartInstance) categoricalChartInstance.destroy();
+            if (numericalChartInstance) numericalChartInstance.destroy();
+        }
+        async function fetchGeneralAnalysis() {
+            // Llama a la API sin parámetro de nutriente para obtener las métricas de calidad
+            const response = await fetch(API_BASE_URL);
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(`Error ${response.status}: ${errorData.error || response.statusText}`);
+            }
+            
+            return response.json();
+        }
+        async function fetchAndRenderRecommendation() {
+            const selectElement = document.getElementById('nutrient-select');
+            const selectedNutrient = selectElement.value;
+            const resultDiv = document.getElementById('recommendation-result');
+
+            if (!selectedNutrient) {
+                resultDiv.innerHTML = '<p class="text-gray-500">Selecciona un nutriente para obtener una recomendación.</p>';
+                return;
+            }
+
+            resultDiv.innerHTML = '<p class="text-indigo-600 font-medium">Calculando la mejor opción...</p>';
+            
+            try {
+                const requestURL = `${API_BASE_URL}?nutriente=${selectedNutrient}`;
+                const response = await fetch(requestURL);
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `Error en la red: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                if (data.recommendation && data.recommendation.food_name) {
+                    const rec = data.recommendation;
+                    resultDiv.innerHTML = `
+                        <h3 class="text-xl font-semibold text-indigo-700 mb-2">${rec.food_name.toUpperCase()}</h3>
+                        <p class="text-gray-700">El mejor alimento en la categoría   ${rec.category} para maximizar ${rec.nutrient_name} y minimizar grasa.</p>
+                        <div class="mt-3 grid grid-cols-2 gap-4">
+                            <p>${rec.nutrient_name}: <span class="font-bold text-green-600">${rec.nutrient_value} g</span></p>
+                            <p>Grasa (Fat):<span class="font-bold text-red-600">${rec.fat_value} g</span></p>
+                            <p class="col-span-2">Índice de Mérito (Score):<span class="font-bold text-indigo-600">${rec.score}</span> (Más alto es mejor)</p>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `<p class="text-red-600">Error: ${data.recommendation.error || 'No se pudo obtener la recomendación.'}</p>`;
+                }
+
+            } catch (error) {
+                console.error("Error al cargar la recomendación:", error);
+                resultDiv.innerHTML = `<p class="text-red-600 font-medium">¡Error de análisis! Revise la consola y el servidor de Django. (${error.message})</p>`;
+            }
+        }
+
+        async function renderDashboard() {
+            try {
+                const data = await fetchGeneralAnalysis();
+            
+                document.getElementById('loading').classList.add('hidden');
+                document.getElementById('kpi-section').classList.remove('hidden');
+                document.getElementById('charts-section').classList.remove('hidden');
+                document.getElementById('recommendation-control').classList.remove('hidden');
+                document.getElementById('quality-header').classList.remove('hidden');
+
+                destroyCharts();
+                
+                renderKPIs(data.metadata, data.null_counts)
+
+                renderNullsChart(data.null_counts);
+
+                renderDuplicatesChart(data.metadata);
+
+                renderCategoricalChart(data.categorical_dist);
+            
+                renderNumericalChart({
+                    labels: ['0-100', '101-500', '501-1000', '1000+'],
+                    counts: [500, 3000, 1000, 500] 
+                });
+                
+                fetchAndRenderRecommendation();
+
+            } catch (error) {
+                console.error("Error al obtener o renderizar los datos:", error);
+                document.getElementById('loading').textContent = `Error: ${error.message}`;
+                document.getElementById('loading').classList.add('text-red-600');
+            }
+        }
+
+        function renderKPIs(metadata, nullCounts) { 
+            document.getElementById('kpi-rows').textContent = metadata.total_rows.toLocaleString('es-MX');
+            document.getElementById('kpi-cols').textContent = metadata.total_cols;
+            document.getElementById('kpi-duplicates').textContent = metadata.duplicate_rows.toLocaleString('es-MX');
+
+            const totalNullsCount = nullCounts.counts.reduce((a, b) => a + b, 0);
+            const totalCells = metadata.total_cols * metadata.total_rows;
+            
+            const nullRatio = (totalNullsCount / totalCells) * 100;
+            document.getElementById('kpi-null-ratio').textContent = `${nullRatio.toFixed(2)}%`;
+        }
+
+        function renderNullsChart(data) {
+            const ctx = document.getElementById('nullsChart').getContext('2d');
+            nullsChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.labels,
+                    datasets: [{
+                        label: 'Valores Faltantes (n)',
+                        data: data.counts,
+                        backgroundColor: '#ef4444', 
+                        borderColor: '#dc2626',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true, title: { display: true, text: 'Conteo de Nulos' } } }
+                }
+            });
+        }
+
+        function renderDuplicatesChart(metadata) {
+            const ctx = document.getElementById('duplicatesChart').getContext('2d');
+            const uniqueRows = metadata.total_rows - metadata.duplicate_rows;
+
+            duplicatesChartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Filas Únicas', 'Filas Duplicadas'],
+                    datasets: [{
+                        data: [uniqueRows, metadata.duplicate_rows],
+                        backgroundColor: ['#10b981', '#f97316'],
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top' },
+                        tooltip: { callbacks: { label: (context) => {
+                            const value = context.parsed;
+                            const total = metadata.total_rows;
+                            const percentage = ((value / total) * 100).toFixed(2);
+                            return `${context.label}: ${value.toLocaleString('es-MX')} (${percentage}%)`;
+                        }}}
+                    }
+                }
+            });
+        }
+        
+        function renderCategoricalChart(data) {
+            const ctx = document.getElementById('categoricalChart').getContext('2d');
+            categoricalChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.labels,
+                    datasets: [{
+                        label: 'Frecuencia',
+                        data: data.counts,
+                        backgroundColor: '#4f46e5', 
+                        borderColor: '#4338ca',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true, title: { display: true, text: 'Frecuencia' } } }
+                }
+            });
+        }
+
+        // Función de Renderizado Gráfico Numérico (Simulación de Histograma)
+        function renderNumericalChart(data) {
+            const ctx = document.getElementById('numericalChart').getContext('2d');
+            numericalChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.labels,
+                    datasets: [{
+                        label: 'Conteo de Observaciones (Bines)',
+                        data: data.counts,
+                        backgroundColor: '#06b6d4',
+                        borderColor: '#0891b2',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true, title: { display: true, text: 'Frecuencia de Observaciones' } } }
+                }
+            });
+        }
+
+        // Inicializar Dashboard
+        window.onload = renderDashboard;
+    </script>
+</body>
+</html>

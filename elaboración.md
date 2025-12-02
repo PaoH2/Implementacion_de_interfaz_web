@@ -80,7 +80,3 @@ Muestra la forma de la distribución. Se utiliza para identificar valores atípi
 4. Conclusión
 
 El dashboard cumple con el objetivo de proporcionar una herramienta visual concisa para la fase de limpieza de datos. La arquitectura de front-end y la simulación de llamadas a la API garantizan la flexibilidad requerida para adaptarse a cualquier dataset, permitiendo al analista pasar rápidamente de la inspección de datos a la toma de decisiones informadas sobre su tratamiento.
-
-Entregables Adicionales
-
-Link del Servidor de Pruebas:

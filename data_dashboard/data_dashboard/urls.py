@@ -16,12 +16,14 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
-from django.views.generic.base import RedirectView # Importar RedirectView
+from django.views.generic.base import RedirectView
 
 urlpatterns = [
-    # Redirige la raíz (/) directamente a la URL de la API
-    path('', RedirectView.as_view(url='/api/data-quality-analysis/', permanent=False), name='api-root-redirect'), 
+    # Redirecciona la raíz (http://127.0.0.1:8000/) a /api/dashboard/
+    path('', RedirectView.as_view(url='/api/dashboard/', permanent=False), name='dashboard-redirect'), 
+    
     path('admin/', admin.site.urls),
-    # Incluye las URLs de la aplicación data_analysis
+    
+    # Incluye todas las rutas de data_analysis.urls bajo el prefijo 'api/'
     path('api/', include('data_analysis.urls')), 
 ]
